@@ -3,6 +3,8 @@
 resolver = "1"
 
 members = [
+    "aoc",
     "day-01",
     "day-02",
+    "day-03",
 ]
