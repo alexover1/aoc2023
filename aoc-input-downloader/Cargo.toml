@@ -1,7 +1,8 @@
 [package]
-name = "aoc"
+name = "aoc-input-downloader"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+anyhow = "1.0.75"
 minreq = { version = "2.11.0", features = ["https-native"] }

@@ -3,9 +3,28 @@
 version = 3
 
 [[package]]
-name = "aoc"
+name = "anyhow"
+version = "1.0.75"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4668cab20f66d8d020e1fbc0ebe47217433c1b6c8f2040faf858554e394ace6"
+
+[[package]]
+name = "aoc-2023"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "aoc-input-downloader",
+ "day-01",
+ "day-02",
+ "day-03",
+ "day-04",
+]
+
+[[package]]
+name = "aoc-input-downloader"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
  "minreq",
 ]
 
@@ -62,6 +81,10 @@ version = "0.1.0"
 
 [[package]]
 name = "day-03"
+version = "0.1.0"
+
+[[package]]
+name = "day-04"
 version = "0.1.0"
 
 [[package]]
