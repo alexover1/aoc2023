@@ -18,7 +18,7 @@ mod tests {
     #[test]
     fn test_part_one() {
         let cards = parse_cards(INPUT);
-        assert_eq!(13, &cadrds);
+        assert_eq!(13, part_one(&cards));
     }
 
     #[test]
