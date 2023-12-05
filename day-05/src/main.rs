@@ -1,3 +1,3 @@
 fn main() {
-    println!("Hello, world!");
+    day_05::run_all();
 }
