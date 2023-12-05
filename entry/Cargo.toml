@@ -1,5 +1,5 @@
 [package]
-name = "aoc-2023"
+name = "entry"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.75"
-aoc-input-downloader = { path = "../aoc-input-downloader" }
+input-downloader = { path = "../input-downloader" }
 day-01 = { path = "../day-01" }
 day-02 = { path = "../day-02" }
 day-03 = { path = "../day-03" }

@@ -1,7 +1,7 @@
 use std::io;
 use std::env;
 use std::mem;
-use aoc_input_downloader::{get_all_inputs, DEFAULT_INPUT_PATH};
+use input_downloader::{get_all_inputs, DEFAULT_INPUT_PATH};
 use anyhow::{anyhow, Result, Context};
 
 fn main() -> Result<()> {

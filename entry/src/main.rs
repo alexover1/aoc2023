@@ -2,7 +2,7 @@ use std::io;
 use std::mem;
 use std::env;
 use std::path::Path;
-use aoc_input_downloader::{get_all_inputs, DEFAULT_INPUT_PATH};
+use input_downloader::{get_all_inputs, DEFAULT_INPUT_PATH};
 use anyhow::{anyhow, Result, Context};
 
 use day_01;

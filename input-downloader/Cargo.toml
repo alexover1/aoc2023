@@ -1,5 +1,5 @@
 [package]
-name = "aoc-input-downloader"
+name = "input-downloader"
 version = "0.1.0"
 edition = "2021"
 

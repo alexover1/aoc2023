@@ -61,3 +61,4 @@ pub fn get_all_inputs(days: Vec<usize>, year: &String, cookie: &String, output_d
 
     Ok(())
 }
+

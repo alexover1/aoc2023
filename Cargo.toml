@@ -3,12 +3,12 @@
 resolver = "1"
 
 members = [
-    "aoc-2023",
-    "aoc-input-downloader",
+    "entry",
+    "input-downloader",
     "day-01",
     "day-02",
     "day-03",
     "day-04",
 ]
 
-default-members = ["aoc-2023"]
+default-members = ["entry"]
