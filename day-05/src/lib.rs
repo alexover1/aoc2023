@@ -2,58 +2,39 @@ use std::fs;
 use std::ops::Range;
 use std::str::FromStr;
 use regex::Regex;
-
-use std::thread;
-use std::sync::Arc;
+use itertools::Itertools;
 
 pub fn run_all() {
     let file_path = "input/5.txt";
     let contents = fs::read_to_string(&file_path).expect("failed to read input file");
     
-    let almanac = contents.parse::<Almanac>().expect("failed to parse input");
+    let tables = parse_transition_tables(&contents).expect("failed to parse transition tables");
     println!("Day 05");
-    println!("    Part One: {}", part_one(&almanac));
-    println!("    Part Two: {}", part_two_ext(&almanac));
+    println!("    Part One: {}", part_one(&contents, &tables));
+    println!("    Part Two: {}", part_two(&contents, &tables));
 }
 
-pub fn part_one(almanac: &Almanac) -> u64 {
-    almanac.seeds
+pub fn part_one(input: &str, tables: &Vec<Table>) -> u64 {
+    let seeds = parse_seeds_part_one(
+        input.lines().next().expect("expected first line"),
+    ).expect("failed to parse seeds");
+
+    seeds
         .iter()
-        .map(|seed| almanac.maps.iter().fold(*seed, |acc, x| x.translate(acc)))
+        .map(|seed| tables.iter().fold(*seed, |acc, table| table.forward(acc)))
         .min()
         .expect("expected at least one seed")
 }
 
-pub fn part_two_ext(input: &Almanac) -> u64 {
-    /*
-    let mut ranges = vec![];
+pub fn part_two(input: &str, tables: &Vec<Table>) -> u64 {
+    let seed_ranges = parse_seeds_part_two(
+        input.lines().next().expect("expected first line"),
+    ).expect("failed to parse seeds");
 
-    // Parse a list of ranges from the input.
-
-    for line in input.lines().filter(|line| line.starts_with(char::is_ascii_digit)) {
-        let parts = line.split_whitespace().filter_map(|x| x.parse().ok());
-
-        let dst = parts.next().unwrap();
-        let src = parts.next().unwrap();
-        let len = parts.next().unwrap();
-        assert_eq!(None, parts.next());
-
-        ranges.push(Range::new(dst, src, len));
-    }
-    */
-
-    let all_seeds: Vec<Range<u64>> = input.seeds
-        .chunks(2)
-        .filter_map(|slice| match slice {
-            &[start, length] => Some(start..start + length),
-            _ => None,
-        })
-        .collect();
-
-    let rev: Vec<Vec<RangePair>> = input.maps
+    let rev: Vec<Vec<RangePair>> = tables
         .iter()
         .rev()
-        .map(|map| map.ranges.iter().map(RangePair::flip).collect())
+        .map(|table| table.matches.iter().map(RangePair::flip).collect())
         .collect();
 
     (0..)
@@ -64,49 +45,9 @@ pub fn part_two_ext(input: &Almanac) -> u64 {
                     .find(|range| range.src.contains(&acc))
                     .map_or(acc, |range| range.translate(acc))
             });
-            all_seeds.iter().any(|seed_range| seed_range.contains(&seed))
+            seed_ranges.iter().any(|seed_range| seed_range.contains(&seed))
         })
         .unwrap()
-}
-
-pub fn part_two(almanac: Almanac) -> u64 {
-    let pairs: Vec<(u64, u64)> = almanac.seeds
-        .chunks(2)
-        .filter_map(|chunk| {
-            if chunk.len() == 2 {
-                Some((chunk[0], chunk[1]))
-            } else {
-                None // Ignore incomplete pairs
-            }
-        })
-        .collect();
-    
-    let data = Arc::new(almanac);
-    let mut handles = vec![];
-
-    for (start, length) in pairs {
-        let almanac = Arc::clone(&data);
-        let handle = thread::spawn(move || {
-            let mut low = u64::MAX;
-            for seed in start..start + length {
-                let cur = almanac.process(seed);
-                if cur < low {
-                    low = cur;
-                }
-            }
-            low
-        });
-        handles.push(handle);
-    }
-
-    let mut low = u64::MAX;
-    for handle in handles {
-        let cur = handle.join().unwrap();
-        if cur < low {
-            low = cur;
-        }
-    }
-    low
 }
 
 #[derive(Debug)]
@@ -130,14 +71,14 @@ impl RangePair {
 }
 
 impl FromStr for RangePair {
-    type Err = ();
+    type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut parts = s.split_whitespace().map(|x| x.parse().unwrap());
+        let mut parts = s.split_whitespace().map(|x| x.parse().map_err(|_| ParseError::ParseInt));
 
-        let dst = parts.next().unwrap();
-        let src = parts.next().unwrap();
-        let len = parts.next().unwrap();
+        let dst = parts.next().ok_or(ParseError::Format("Expected `dst` field".into()))??;
+        let src = parts.next().ok_or(ParseError::Format("Expected `src` field".into()))??;
+        let len = parts.next().ok_or(ParseError::Format("Expected `len` field".into()))??;
         assert_eq!(None, parts.next());
 
         Ok(Self {
@@ -147,89 +88,94 @@ impl FromStr for RangePair {
     }
 }
 
-#[derive(Debug)]
-pub struct Map {
-    // name: String,
-    ranges: Vec<RangePair>,
+/// A table is a list of transitions from source to
+/// destination ranges.
+///
+/// For example:
+///     `[0..10] => [50..60]`
+///     `[20..25] => [80..85]`
+///     `_ => x`
+pub struct Table {
+    matches: Vec<RangePair>,
 }
 
-impl Map {
-    fn translate(&self, num: u64) -> u64 {
-        for pair in &self.ranges {
-            if pair.contains(num) {
-                return pair.translate(num);
-            }
-        }
-        return num;
+impl Table {
+    /// Maps the number to the corresponding range from
+    /// the list of matches in the transition table, or
+    /// returns the original number.
+    fn forward(&self, x: u64) -> u64 {
+        self.matches
+            .iter()
+            .find(|&range_pair| range_pair.contains(x))
+            .map(|range_pair| range_pair.translate(x))
+            .unwrap_or(x)
+        
+        // self.matches.iter().fold(x, |acc, range_pair| range_pair.translate(acc))
     }
 }
 
-impl FromStr for Map {
+impl FromStr for Table {
     type Err = ParseError;
 
+    /// Note: The input is expected to include a line of the format
+    /// `seed-to-soil map:`, but the implementation currently just
+    /// ignores the first line.
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut lines = s.lines();
-        lines.next().expect("expected at least one line");
-        let mut ranges = Vec::new();
-        while let Some(line) = lines.next() {
-            ranges.push(line.parse().unwrap());
+        let mut matches = vec![];
+        for line in s.lines().skip(1) {
+            matches.push(line.parse()?);
         }
-        Ok(Self { ranges })
+        Ok(Self { matches })
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum ParseError {
-    Format,
+    Format(String),
     ParseInt,
     Regex,
 }
 
-#[derive(Debug)]
-pub struct Almanac {
-    seeds: Vec<u64>,
-    maps: Vec<Map>,
+/// Parses a list of numbers corresponding to a list of seeds.
+pub fn parse_seeds_part_one(first_line: &str) -> Result<Vec<u64>, ParseError> {
+    let result = first_line 
+        .strip_prefix("seeds: ")
+        .ok_or(ParseError::Format("Invalid first line".into()))?
+        .split_whitespace()
+        .filter_map(|x| x.parse().ok())
+        .collect();
+    Ok(result)
 }
 
-impl Almanac {
-    fn process(&self, seed: u64) -> u64 {
-        self.maps
-            .iter()
-            .fold(seed, |acc, map| map.translate(acc))
-    }
-
-    /*fn build_hash_map(&self) -> HashMap<u64, u64> {
-        for map in &self.maps {
-            for range in map.ranges {
-            }
-        }
-    }*/
+/// Parses a list of pairs of numbers corresponding to `pairs` of seeds,
+/// where the first number is the starting seed, and the second is the
+/// length of the range: `start..start + length`.
+pub fn parse_seeds_part_two(first_line: &str) -> Result<Vec<Range<u64>>, ParseError> {
+    let result = first_line
+        .strip_prefix("seeds: ")
+        .ok_or(ParseError::Format("Invalid first line".into()))?
+        .split_whitespace()
+        .map(|x| x.parse().unwrap())
+        .tuples()
+        .map(|(start, length)| start..start + length)
+        .collect();
+    Ok(result)
 }
 
-impl FromStr for Almanac {
-    type Err = ParseError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let re = Regex::new(r"\n\s*\n").map_err(|_| ParseError::Regex)?;
-        let mut regions = re.split(s);
-        let first_line = regions.next().ok_or(ParseError::Format)?;
-        let seeds: Vec<u64> = first_line
-            .strip_prefix("seeds:")
-            .ok_or(ParseError::Format)?
-            .split_whitespace()
-            .filter_map(|x| x.parse().ok())
-            .collect();
-        let mut maps = Vec::new();
-        while let Some(region) = regions.next() {
-            maps.push(region.parse()?);
-        }
-        Ok(Self { seeds, maps })
+/// Note: The input is expected to not include the first line,
+/// which starts with `seeds:`.
+pub fn parse_transition_tables(input: &str) -> Result<Vec<Table>, ParseError> {
+    let re = Regex::new(r"\n\s*\n").map_err(|_| ParseError::Regex)?;
+    let mut result = Vec::new();
+    for region in re.split(input) {
+        result.push(region.parse()?);
     }
+    Ok(result)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{part_one, Almanac, Map};
+    use super::{part_one, part_two, parse_transition_tables, Table};
 
     const INPUT: &str = concat!(
         "seeds: 79 14 55 13\n",
@@ -269,34 +215,27 @@ mod tests {
 
     #[test]
     fn test_part_one() {
-        let almanac = INPUT.parse::<Almanac>().expect("failed to parse input");
-        assert_eq!(35, part_one(&almanac));
+        let tables = parse_transition_tables(INPUT).expect("failed to parse transition tables");
+        assert_eq!(35, part_one(INPUT, &tables));
     }
 
     #[test]
-    fn test_parse_almanac() {
-        let almanac = INPUT.parse::<Almanac>().expect("failed to parse almanac");
-        assert_eq!(4, almanac.seeds.len());
-        assert_eq!(7, almanac.maps.len());
+    fn test_part_two() {
+        let tables = parse_transition_tables(INPUT).expect("failed to parse transition tables");
+        assert_eq!(46, part_two(INPUT, &tables));
     }
 
     #[test]
-    fn test_parse_map() {
+    fn test_parse_tables() {
         let input = concat!(
             "seed-to-soil map:\n",
             "50 98 2\n",
             "52 50 48\n",
         );
 
-        let map = input.parse::<Map>().expect("failed to parse map");
-        assert_eq!(2, map.ranges.len());
-        assert_eq!(50, map.ranges[0].destination_start);
-        assert_eq!(98, map.ranges[0].source_start);
-        assert_eq!(2, map.ranges[0].range_length);
-
-        println!("First:");
-        assert_eq!(50, map.next(98));
-        println!("Second:");
-        assert_eq!(51, map.next(99));
+        let table = input.parse::<Table>().expect("failed to parse table");
+        assert_eq!(2, table.matches.len());
+        assert_eq!(50, table.matches[0].dst.start);
+        assert_eq!(98, table.matches[0].src.start);
     }
 }
