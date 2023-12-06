@@ -1,8 +1,10 @@
 use std::fs;
-use std::thread;
-use std::sync::Arc;
+use std::ops::Range;
 use std::str::FromStr;
 use regex::Regex;
+
+use std::thread;
+use std::sync::Arc;
 
 pub fn run_all() {
     let file_path = "input/5.txt";
@@ -11,21 +13,60 @@ pub fn run_all() {
     let almanac = contents.parse::<Almanac>().expect("failed to parse input");
     println!("Day 05");
     println!("    Part One: {}", part_one(&almanac));
-    println!("    Part Two: {}", part_two(almanac));
+    println!("    Part Two: {}", part_two_ext(&almanac));
 }
 
 pub fn part_one(almanac: &Almanac) -> u64 {
     almanac.seeds
         .iter()
-        .map(|seed| {
-            let mut cur = *seed;
-            for map in &almanac.maps {
-                cur = map.next(cur);
-            }
-            cur
-        })
+        .map(|seed| almanac.maps.iter().fold(*seed, |acc, x| x.translate(acc)))
         .min()
         .expect("expected at least one seed")
+}
+
+pub fn part_two_ext(input: &Almanac) -> u64 {
+    /*
+    let mut ranges = vec![];
+
+    // Parse a list of ranges from the input.
+
+    for line in input.lines().filter(|line| line.starts_with(char::is_ascii_digit)) {
+        let parts = line.split_whitespace().filter_map(|x| x.parse().ok());
+
+        let dst = parts.next().unwrap();
+        let src = parts.next().unwrap();
+        let len = parts.next().unwrap();
+        assert_eq!(None, parts.next());
+
+        ranges.push(Range::new(dst, src, len));
+    }
+    */
+
+    let all_seeds: Vec<Range<u64>> = input.seeds
+        .chunks(2)
+        .filter_map(|slice| match slice {
+            &[start, length] => Some(start..start + length),
+            _ => None,
+        })
+        .collect();
+
+    let rev: Vec<Vec<RangePair>> = input.maps
+        .iter()
+        .rev()
+        .map(|map| map.ranges.iter().map(RangePair::flip).collect())
+        .collect();
+
+    (0..)
+        .find(|&loc| {
+            let seed = rev.iter().fold(loc, |acc, ranges| {
+                ranges
+                    .iter()
+                    .find(|range| range.src.contains(&acc))
+                    .map_or(acc, |range| range.translate(acc))
+            });
+            all_seeds.iter().any(|seed_range| seed_range.contains(&seed))
+        })
+        .unwrap()
 }
 
 pub fn part_two(almanac: Almanac) -> u64 {
@@ -69,32 +110,57 @@ pub fn part_two(almanac: Almanac) -> u64 {
 }
 
 #[derive(Debug)]
-pub struct Range {
-    destination_start: u64,
-    source_start: u64,
-    range_length: u64,
+pub struct RangePair {
+    src: Range<u64>,
+    dst: Range<u64>,
+}
+
+impl RangePair {
+    fn flip(&self) -> Self {
+        Self { src: self.dst.clone(), dst: self.src.clone() }
+    }
+
+    fn contains(&self, num: u64) -> bool {
+        self.src.contains(&num)
+    }
+
+    fn translate(&self, num: u64) -> u64 {
+        self.dst.start + num - self.src.start
+    }
+}
+
+impl FromStr for RangePair {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut parts = s.split_whitespace().map(|x| x.parse().unwrap());
+
+        let dst = parts.next().unwrap();
+        let src = parts.next().unwrap();
+        let len = parts.next().unwrap();
+        assert_eq!(None, parts.next());
+
+        Ok(Self {
+            src: src..src + len,
+            dst: dst..dst + len,
+        })
+    }
 }
 
 #[derive(Debug)]
 pub struct Map {
     // name: String,
-    ranges: Vec<Range>,
+    ranges: Vec<RangePair>,
 }
 
 impl Map {
-    fn next(&self, item: u64) -> u64 {
-        for range in &self.ranges {
-            // item = 98
-            // source_start = 98
-            // range_length = 2
-            // range is [98, 99]
-            // item >= range.start && item < range.end
-            if item >= range.source_start && item < range.source_start + range.range_length {
-                let offset = item - range.source_start;
-                return range.destination_start + offset;
+    fn translate(&self, num: u64) -> u64 {
+        for pair in &self.ranges {
+            if pair.contains(num) {
+                return pair.translate(num);
             }
         }
-        return item;
+        return num;
     }
 }
 
@@ -106,14 +172,7 @@ impl FromStr for Map {
         lines.next().expect("expected at least one line");
         let mut ranges = Vec::new();
         while let Some(line) = lines.next() {
-            let parts: Vec<&str> = line.split_whitespace().collect();
-            assert_eq!(3, parts.len(), "expected 3 numbers on each line");
-            let range = Range {
-                destination_start: parts[0].parse().map_err(|_| ParseError::ParseInt)?,
-                source_start: parts[1].parse().map_err(|_| ParseError::ParseInt)?,
-                range_length: parts[2].parse().map_err(|_| ParseError::ParseInt)?,
-            };
-            ranges.push(range);
+            ranges.push(line.parse().unwrap());
         }
         Ok(Self { ranges })
     }
@@ -133,12 +192,18 @@ pub struct Almanac {
 }
 
 impl Almanac {
-    fn process(&self, mut seed: u64) -> u64 {
-        for map in &self.maps {
-            seed = map.next(seed);
-        }
-        seed
+    fn process(&self, seed: u64) -> u64 {
+        self.maps
+            .iter()
+            .fold(seed, |acc, map| map.translate(acc))
     }
+
+    /*fn build_hash_map(&self) -> HashMap<u64, u64> {
+        for map in &self.maps {
+            for range in map.ranges {
+            }
+        }
+    }*/
 }
 
 impl FromStr for Almanac {
