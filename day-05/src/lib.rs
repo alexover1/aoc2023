@@ -50,7 +50,8 @@ pub fn part_two(input: &str, tables: &Vec<Table>) -> u64 {
         .unwrap()
 }
 
-#[derive(Debug)]
+/// A range pair is a mapping from a source range
+/// to a destination range.
 pub struct RangePair {
     src: Range<u64>,
     dst: Range<u64>,
